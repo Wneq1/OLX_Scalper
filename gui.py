@@ -102,6 +102,21 @@ st.markdown("""
         }
     }
     
+    .offer-location {
+        height: 1.5em;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 0.85rem;
+        color: #555;
+        margin-bottom: 8px;
+    }
+    /* Tryb ciemny - dostosowanie lokalizacji */
+    @media (prefers-color-scheme: dark) {
+        .offer-location {
+            color: #bbb;
+        }
+    }
     /* Sticky Search Header */
     /* Targetujemy diva, który jest rodzicem naszego markera */
     div[data-testid="stVerticalBlock"] > div:has(.sticky-search-marker) {
@@ -235,6 +250,9 @@ def main():
                     wyniki_to_display.sort(key=parse_price, reverse=reverse_sort)
 
                 if widok == "Siatka":
+                    # Styl CSS dla siatki (grid)
+                    # Używamy st.columns, ale musimy zadbać o równe wysokości
+                    
                     for i in range(0, len(wyniki_to_display), 3):
                         batch = wyniki_to_display[i:i+3]
                         cols = st.columns(3)
@@ -242,22 +260,29 @@ def main():
                         for j, oferta in enumerate(batch):
                             with cols[j]:
                                 with st.container(border=True):
+                                    # 1. Zdjęcie (stała wys. 200px)
                                     img_url = oferta.get('image_url')
                                     if img_url:
                                         st.markdown(f'<div class="img-container"><img src="{img_url}"></div>', unsafe_allow_html=True)
                                     else:
                                         st.markdown('<div class="img-placeholder">Brak zdjęcia</div>', unsafe_allow_html=True)
                                     
+                                    # 2. Tytuł (stała wys. 3.6em ~ 3 linie)
                                     title = oferta.get('title', 'Brak tytułu').replace('"', '&quot;')
                                     st.markdown(f'<div class="offer-title" title="{title}">{title}</div>', unsafe_allow_html=True)
                                     
+                                    # 3. Cena (auto, ale zwykle 1 linia)
                                     cena = oferta.get('price', '???')
                                     st.markdown(f"<div class='price-tag'>{cena} zł</div>", unsafe_allow_html=True)
                                     
-                                    if 'location' in oferta:
-                                        st.caption(f"📍 {oferta['location']}")
+                                    # 4. Lokalizacja (stała wys. 1.5em ~ 1 linia, ucinana)
+                                    # Zastępujemy st.caption stałym div-em
+                                    loc = oferta.get('location', '')
+                                    st.markdown(f'<div class="offer-location">📍 {loc}</div>', unsafe_allow_html=True)
                                     
-                                    st.markdown("---")
+                                    # 5. Przycisk (zawsze na dole kontenera dzięki stałym wysokościom powyżej)
+                                    # Separator można pominąć dla czystszego wyglądu, lub zostawić
+                                    # st.markdown("---") 
                                     url = oferta.get('url', '#')
                                     st.link_button("Zobacz ofertę", url, use_container_width=True)
                 
@@ -304,23 +329,32 @@ def main():
             # Wizualizacja: Liczba ofert w czasie (wg search_query)
             st.subheader("📊 Statystyki")
             
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.write("Liczba ofert wg frazy:")
-                st.bar_chart(df['search_query'].value_counts())
+            try:
+                col1, col2 = st.columns(2)
                 
-            with col2:
-                # Próba konwersji ceny na liczbę do wykresu (proste czyszczenie)
-                try:
-                    df['price_num'] = df['price'].astype(str).str.replace(' ', '').str.replace('zł', '').str.replace(',', '.').str.extract(r'(\d+\.?\d*)').astype(float)
-                    st.write("Rozkład cen (wszystkie oferty):")
-                    st.scatter_chart(data=df, x='created_at', y='price_num', color='search_query')
-                except Exception as e:
-                    st.warning("Nie udało się wygenerować wykresu cen (możliwe błędy w formacie danych).")
+                with col1:
+                    st.write("Liczba ofert wg frazy:")
+                    st.bar_chart(df['search_query'].value_counts())
+                    
+                with col2:
+                    # Próba konwersji ceny na liczbę do wykresu (proste czyszczenie)
+                    try:
+                        df['price_num'] = df['price'].astype(str).str.replace(' ', '').str.replace('zł', '').str.replace(',', '.').str.extract(r'(\d+\.?\d*)').astype(float)
+                        st.write("Rozkład cen (wszystkie oferty):")
+                        st.scatter_chart(data=df, x='created_at', y='price_num', color='search_query')
+                    except Exception as e:
+                        st.warning("Nie udało się wygenerować wykresu cen (możliwe błędy w formacie danych).")
 
-            st.subheader("📋 Tabela danych")
-            st.dataframe(df.sort_values(by='created_at', ascending=False), use_container_width=True)
+                st.subheader("📋 Tabela danych")
+                st.dataframe(df.sort_values(by='created_at', ascending=False), use_container_width=True)
+            except ImportError:
+                st.error("⚠️ Nie można załadować wykresów ani tabeli interaktywnej (błąd biblioteki PyArrow).")
+                st.warning("Prawdopodobnie używasz niestabilnej wersji Pythona (3.14), która nie wspiera jeszcze w pełni wszystkich bibliotek.")
+                st.subheader("📋 Tabela danych (Tryb uproszczony)")
+                st.markdown(df.sort_values(by='created_at', ascending=False).to_html(escape=False), unsafe_allow_html=True)
+            except Exception as e:
+                st.error(f"Wystąpił nieoczekiwany błąd podczas rysowania wykresów: {e}")
+                st.write(df)
             
             # Galeria z historii (opcjonalnie)
             st.subheader("🖼️ Galeria ostatnich ofert")
